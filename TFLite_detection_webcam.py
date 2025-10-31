@@ -96,26 +96,19 @@ class VideoStream:
 
 def picture_in_picture(main_image, overlay, x_offset, y_offset):
     """
-    Overlay an image onto a main image with a white border.
-    
-    Args:
-        main_image (image): The main image.
-        overlay_image (image): The overlay image.
-        img_ratio (int): The ratio to resize the overlay image height relative to the main image.
-        border_size (int): Thickness of the white border around the overlay image.
-        x_margin (int): Margin from the right edge of the main image.
-        y_offset_adjust (int): Adjustment for vertical offset.
-
-    Returns:
-        np.ndarray: The resulting image with the overlay applied.
+    Overlay an image onto a main image.
     """
     
-    y_offset = y_offset + 20
-    x_offset = x_offset - 338
+    x_offset = x_offset - overlay.shape[1]
+    #y_offset = y_offset - 20
 
-    if x_offset < 0:
+
+    # Do not try to draw off screen
+    if x_offset < 0 or y_offset < 0:
 	    return main_image
 
+    if x_offset + overlay.shape[1] > main_image.shape[1] or y_offset + overlay.shape[0] > main_image.shape[0]:
+	    return main_image
     
     alpha_channel = overlay[:, :, 3] / 255.0
     overlay_colors = overlay[:, :, :3]
@@ -123,13 +116,18 @@ def picture_in_picture(main_image, overlay, x_offset, y_offset):
     alpha_mask_3ch = np.stack([alpha_channel, alpha_channel, alpha_channel], axis = 2)
     # ghostly alpha
     alpha_mask_3ch = 0.5 * alpha_mask_3ch
-    
-    
+        
     original = main_image[y_offset:y_offset + overlay.shape[0], x_offset:x_offset + overlay.shape[1]]
+    
+    #if (debug_tw ==1) :
+    
+    # Dont try to draw outside
+    if (original.shape[0] != overlay.shape[0] or original.shape[1] != overlay.shape[1]):
+        print(str(original.shape[0]) + " != " + str(overlay.shape[0]) + " or " + str(original.shape[1]) + " != " + str(overlay.shape[1]))
+        return main_image
     
     mixedimage = (overlay_colors * alpha_mask_3ch + original * (1-alpha_mask_3ch)).astype(np.uint8)
     
-
     # Overlay the image
     main_image[y_offset:y_offset + overlay.shape[0], x_offset:x_offset + overlay.shape[1]] = mixedimage #overlay_with_border
 
@@ -456,6 +454,7 @@ while True:
         print("Person lost, time since seen: " + str(personlosttime) )
         out.release()
         eyesopen = 0
+        ghostpositionx = -10
     elif (primary_person_found == 1 and eyesopen == 0):
         print("Eyes open")
         filename = "/home/orangepi/tflite1/Videos/video" + str(round(time.time())) + ".mp4"
