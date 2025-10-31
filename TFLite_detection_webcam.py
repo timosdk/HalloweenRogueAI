@@ -94,7 +94,7 @@ class VideoStream:
         self.stopped = True
 
 
-def picture_in_picture(main_image, overlay_image, x_offset, y_offset):
+def picture_in_picture(main_image, overlay, x_offset, y_offset):
     """
     Overlay an image onto a main image with a white border.
     
@@ -109,30 +109,29 @@ def picture_in_picture(main_image, overlay_image, x_offset, y_offset):
     Returns:
         np.ndarray: The resulting image with the overlay applied.
     """
+    
+    y_offset = y_offset + 20
+    x_offset = x_offset - 338
+
     if x_offset < 0:
 	    return main_image
+
     
-    img_ratio=4
-    x_margin=25
-    y_offset_adjust=-150
+    alpha_channel = overlay[:, :, 3] / 255.0
+    overlay_colors = overlay[:, :, :3]
     
-    if main_image is None or overlay_image is None:
-        raise FileNotFoundError("One or both images not found.")
-
-    # Resize the overlay image to 1/img_ratio of the main image height
-    new_height = main_image.shape[0] // img_ratio
-    new_width = int(new_height * (overlay_image.shape[1] / overlay_image.shape[0]))
-    overlay_resized = cv2.resize(overlay_image, (new_width, new_height))
-
-    # We dont need to add a white border to the overlay image
-    overlay_with_border = overlay_resized
-
-    # Determine overlay position
-    #x_offset = main_image.shape[1] - overlay_with_border.shape[1] - x_margin
-    #y_offset = (main_image.shape[0] // 2) - overlay_with_border.shape[0] + y_offset_adjust
+    alpha_mask_3ch = np.stack([alpha_channel, alpha_channel, alpha_channel], axis = 2)
+    # ghostly alpha
+    alpha_mask_3ch = 0.5 * alpha_mask_3ch
+    
+    
+    original = main_image[y_offset:y_offset + overlay.shape[0], x_offset:x_offset + overlay.shape[1]]
+    
+    mixedimage = (overlay_colors * alpha_mask_3ch + original * (1-alpha_mask_3ch)).astype(np.uint8)
+    
 
     # Overlay the image
-    main_image[y_offset:y_offset + overlay_with_border.shape[0], x_offset:x_offset + overlay_with_border.shape[1]] = overlay_with_border
+    main_image[y_offset:y_offset + overlay.shape[0], x_offset:x_offset + overlay.shape[1]] = mixedimage #overlay_with_border
 
     return main_image
 
@@ -288,12 +287,16 @@ if (use_serial == 1):
 
 # Load an image of a ghost to display
 # Load an image
-image = cv2.imread('images/ghost.jpg')  
+ghostimage = cv2.imread('images/ghost.png', cv2.IMREAD_UNCHANGED)  
 
-if image is None:
+if ghostimage is None:
   print("Error: Could not load image.")
 else:
   print("Loaded the ghost image.")
+
+# Position of the ghost image:
+ghostpositionx = 0
+ghostpositiony = 0
 
 
 # Setup for running
@@ -375,6 +378,9 @@ while True:
                     costume  = random.choice(costumelist)
                     prompt   = random.choice(promptlist)
                     
+                    ghostpositionx = xmax
+                    ghostpositiony = ymin
+                    
                     primary_person_center_x = int(xmin + (xmax - xmin)/2)
                     primary_person_center_y = int(ymin + (ymax - ymin)/2)
                     
@@ -407,6 +413,9 @@ while True:
                         color = (255, 0, 0)
                         
                 
+            if(ghostpositionx > 0) :
+                frame = picture_in_picture(frame, ghostimage, ghostpositionx, ghostpositiony)
+            
             if (should_show_boundingbox or debug_tw == 1): 
                 cv2.rectangle(frame, (xmin,ymin), (xmax,ymax), color, 6)
                 label = '%s: %d%%' % (object_name, int(scores[i]*100)) # Example: 'person: 72%'
@@ -424,8 +433,12 @@ while True:
         out.write(frame)
 
     # All the results have been drawn on the frame, so it's time to display it.
-    result_image = picture_in_picture(frame, image, xmin, ymin)
-    cv2.imshow('Object detector', result_image)
+    #if (xmin > 0):
+	#    result_image = picture_in_picture(frame, image, xmin, ymin)
+    #else:
+	#    result_image = frame
+		
+    cv2.imshow('Object detector', frame)
 
     # Calculate framerate
     t2 = cv2.getTickCount()
